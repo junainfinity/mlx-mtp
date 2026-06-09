@@ -118,7 +118,7 @@ def main():
     print(f"  SPEEDUP        : {agg['mean_speedup']:.2f}x", flush=True)
     print(f"  accept rate    : {agg['mean_accept_rate']*100:.1f}%", flush=True)
     print(f"  TTFT (vanilla) : {agg['mean_vanilla_ttft_ms']:.0f} ms", flush=True)
-    print(f"  lossless       : {agg['all_identical']} (MTP == vanilla output)", flush=True)
+    print(f"  byte-identical : {agg['all_identical']} (MTP == vanilla output on all prompts)", flush=True)
     if vis:
         print(f"  vision (8-bit) : {vis['gen_tps']:.2f} tok/s, caption OK", flush=True)
     print("==================================================", flush=True)

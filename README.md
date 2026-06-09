@@ -16,7 +16,7 @@
 | **DFlash + MTP hybrid** (adaptive) | 23.8 | 1.51× |
 
 - Quantizer: 52 GB bf16 → **28 GB** 8-bit; **vision tower kept fp16**; **MTP head preserved**.
-- Native MTP is **lossless** (output matches vanilla AR; speculative decoding is exact w.r.t. the verify-pass distribution).
+- **Not strictly lossless, but better than the available alternatives.** Native-MTP output matches vanilla greedy AR on most prompts (3/4 byte-identical in the [benchmark](benchmarks/RESULTS.md)); the occasional divergence is a near-tie argmax flip from the quantized 2-token verify forward — not a quality regression — and speculative decoding stays exact w.r.t. the verify-pass distribution. Net: **faster decode at output quality on par with vanilla**, on a hybrid VLM that no existing speculative-decoding stack (mlx-vlm / omlx / MTPLX) drives with its embedded MTP head at all.
 - Vision works on the 8-bit quant (correct image captioning). Full numbers: [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
 
 ## How it works
@@ -44,7 +44,7 @@ pip install -e .
 # Quantize a Qwen3.5/3.6 VLM to 8-bit (vision fp16, MTP preserved)
 python -m mlx_mtp.oq_quantize --src <bf16-model-dir> --out <out-dir> --level 8
 
-# Vanilla vs native-MTP (+ acceptance, lossless check)
+# Vanilla vs native-MTP (+ acceptance, output-match check)
 python -m mlx_mtp.engine --model <out-dir> --max-tokens 128
 
 # Full benchmark + vision test → JSON
