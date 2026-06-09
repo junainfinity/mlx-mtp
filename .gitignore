@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# venvs
+.venv/
+.venv-*/
+venv/
+env/
+
+# models / weights (never commit — huge, and not ours to redistribute)
+*.safetensors
+*.gguf
+*.bin
+models/
+*-MLX-*/
+*-oQ8/
+*-DFlash/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# local benchmark outputs (the committed one lives in benchmarks/)
+/benchmark*.json
+!benchmarks/benchmark.json

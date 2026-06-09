@@ -1,0 +1,79 @@
+{
+  "model": "<models>/osmQwopus3.6-27B-mlxmtp-oQ8",
+  "load_s": 1.5230035839995253,
+  "max_tokens": 128,
+  "device": "Apple M4 Max",
+  "decode": "D1 greedy native-MTP",
+  "per_prompt": [
+    {
+      "prompt": "Write a short paragraph about the city of Tokyo.",
+      "vanilla_tps": 15.735211635055842,
+      "mtp_tps": 25.13096331034968,
+      "speedup": 1.5971163205940888,
+      "vanilla_ttft_ms": 157.6427079999121,
+      "mtp_ttft_ms": 169.3345000003319,
+      "accept_rate": 0.7857142857142857,
+      "rounds": 70,
+      "accepts": 55,
+      "vanilla_tokens": 126,
+      "mtp_tokens": 126,
+      "identical_output": true
+    },
+    {
+      "prompt": "Explain how multi-token prediction speeds up LLM inference.",
+      "vanilla_tps": 15.525452126587309,
+      "mtp_tps": 22.987548795453883,
+      "speedup": 1.480636351716144,
+      "vanilla_ttft_ms": 158.39704199970583,
+      "mtp_ttft_ms": 201.16037499974482,
+      "accept_rate": 0.620253164556962,
+      "rounds": 79,
+      "accepts": 49,
+      "vanilla_tokens": 128,
+      "mtp_tokens": 129,
+      "identical_output": true
+    },
+    {
+      "prompt": "List three benefits of Apple Silicon for local AI, with one sentence each.",
+      "vanilla_tps": 15.498650013769282,
+      "mtp_tps": 21.708050314164925,
+      "speedup": 1.4006413652078793,
+      "vanilla_ttft_ms": 158.69970799940347,
+      "mtp_ttft_ms": 209.61858299961023,
+      "accept_rate": 0.5873015873015873,
+      "rounds": 63,
+      "accepts": 37,
+      "vanilla_tokens": 91,
+      "mtp_tokens": 99,
+      "identical_output": false
+    },
+    {
+      "prompt": "Describe the plot of a short story about a lighthouse keeper.",
+      "vanilla_tps": 15.360256910575867,
+      "mtp_tps": 22.55231237218651,
+      "speedup": 1.4682249459420669,
+      "vanilla_ttft_ms": 162.9361669984064,
+      "mtp_ttft_ms": 223.1056250002439,
+      "accept_rate": 0.6282051282051282,
+      "rounds": 78,
+      "accepts": 49,
+      "vanilla_tokens": 128,
+      "mtp_tokens": 128,
+      "identical_output": true
+    }
+  ],
+  "aggregate": {
+    "mean_vanilla_tps": 15.529892671497075,
+    "mean_mtp_tps": 23.09471869803875,
+    "mean_speedup": 1.4866547458650448,
+    "mean_accept_rate": 0.6553685414444907,
+    "mean_vanilla_ttft_ms": 159.41890624935695,
+    "all_identical": false
+  },
+  "vision": {
+    "ttft_s": 1.422092500000872,
+    "text": "This image features a minimalist composition on a plain white background.\n\nThere are two primary geometric shapes:\n\n1. **A red circle** \u2014 located in the upper-left portion of the image. It is solid, bright red, and perfectly circular.\n2. **A blue square** \u2014 positioned in the lower-right portion of the image. It is solid, vibrant blue, and aligned with the horizontal and vertical axes (not rotated).\n\nAdditionally, near the bottom center of",
+    "gen_tokens": 96,
+    "gen_tps": 16.193006921632744
+  }
+}
