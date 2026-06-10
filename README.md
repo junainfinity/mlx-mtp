@@ -4,6 +4,8 @@
 
 `mlx-mtp` runs a **VLM** with its **embedded multi-token-prediction (MTP) head** as a self-drafter — no external drafter — and ships a quantizer that keeps the vision tower in fp16 while compressing the language model to 8-bit and **preserving the MTP head**. It also includes an experimental **DFlash + MTP hybrid**.
 
+> 🖥️ **mlx-mtp is the inference engine behind [VibeStudio](../vibestudio/)**, our local coding-agent desktop app (Tauri + React). VibeStudio's **Decoding** tab — Standard / **MTP ×N** / **DFlash** / **Speculative** — selects and parameterizes this engine (served through `omlx serve`); its run benchmarks are this repo's numbers end-to-end.
+
 > ⚠️ **Research artifact, not a polished package.** It builds on and adapts [oMLX](https://github.com/jundot/omlx) (the embedded-MTP runtime patch + `oQ` quantizer) and the ideas of [MTPLX](https://github.com/youssofal/MTPLX), and calls some **private** `mlx-vlm` internals. It pins to a specific MLX stack and will need updates as those move. See [Status & caveats](#status--caveats).
 
 ## Results (Apple M4 Max · osmQwopus-3.6-27B · 8-bit · greedy · D1)
