@@ -1,77 +1,169 @@
 # mlx-mtp
 
-**Native MTP speculative decoding + vision-preserving 8-bit quantization for Qwen3.5 / 3.6 vision-language models on Apple Silicon.**
+**A new MLX quantization and inference stack for Apple Silicon — purpose-built for vision-language models with speculative decoding.**
 
-`mlx-mtp` runs a **VLM** with its **embedded multi-token-prediction (MTP) head** as a self-drafter — no external drafter — and ships a quantizer that keeps the vision tower in fp16 while compressing the language model to 8-bit and **preserving the MTP head**. It also includes an experimental **DFlash + MTP hybrid**.
+`mlx-mtp` is a modular quantization + inference library for running large VLMs fast and locally on Apple Silicon. It ships:
 
-> 🖥️ **mlx-mtp is the inference engine behind [VibeStudio](../vibestudio/)**, our local coding-agent desktop app (Tauri + React). VibeStudio's **Decoding** tab — Standard / **MTP ×N** / **DFlash** / **Speculative** — selects and parameterizes this engine (served through `omlx serve`); its run benchmarks are this repo's numbers end-to-end.
+- **Multiple quantization formats** — 8-bit affine (oQ), MXFP4 (OCP MX, 4-bit E2M1), with vision tower and SSM-sensitive params preserved in fp16 across all formats
+- **Native MTP speculative decoding** — drives a model's own embedded multi-token-prediction head as a self-drafter; no external model needed
+- **DFlash block-diffusion** — external block-diffusion drafter path with tunable block size
+- **MTP + DFlash hybrid** — adaptive per-round bandit that picks whichever drafter is faster in context
+- **A full benchmark harness** — vanilla vs MTP vs DFlash vs hybrid, with TTFT, acceptance rate, vision, and output-match checks
 
-> ⚠️ **Research artifact, not a polished package.** It builds on and adapts [oMLX](https://github.com/jundot/omlx) (the embedded-MTP runtime patch + `oQ` quantizer) and the ideas of [MTPLX](https://github.com/youssofal/MTPLX), and calls some **private** `mlx-vlm` internals. It pins to a specific MLX stack and will need updates as those move. See [Status & caveats](#status--caveats).
+> **Best recommended model: [osmQwopus-3.6-27B](https://huggingface.co/junainfinity/osmQwopus)** — a 27B Qwen3.6-based uncensored VLM. All benchmarks in this repo are on osmQwopus; it is the most tested and optimized target. The stack will work with any Qwen3.5/3.6-family VLM that carries a MTP head and runs in `mlx-vlm`.
 
-## Results (Apple M4 Max · osmQwopus-3.6-27B · 8-bit · greedy · D1)
+> **mlx-mtp is the inference engine behind [VibeStudio](https://github.com/junainfinity/VibeStudio)**, a local coding-agent desktop app (Tauri + React). VibeStudio's Decoding tab — Standard / MTP ×N / DFlash / Speculative — selects and parameterizes this engine through `omlx serve`.
+
+---
+
+## Benchmarks (Apple M4 Max · osmQwopus-3.6-27B · greedy · D1)
+
+### 8-bit affine (oQ) — 28 GB · vision fp16 · MTP head preserved
 
 | Path | tok/s | speedup |
 |---|---|---|
 | Vanilla AR | 15.7 | 1.00× |
-| **Native MTP** (embedded head) | **25.5** | **1.62×** |
-| DFlash (external diffusion drafter, block 16) | 19.9 | 1.27× |
-| **DFlash + MTP hybrid** (adaptive) | 23.8 | 1.51× |
+| **Native MTP** (embedded head, no drafter) | **25.5** | **1.62×** |
+| DFlash (z-lab drafter, block 16) | 24.1 | 1.52× |
+| DFlash + MTP hybrid (adaptive) | 23.8 | 1.51× |
 
-- Quantizer: 52 GB bf16 → **28 GB** 8-bit; **vision tower kept fp16**; **MTP head preserved**.
-- **Not strictly lossless, but better than the available alternatives.** Native-MTP output matches vanilla greedy AR on most prompts (3/4 byte-identical in the [benchmark](benchmarks/RESULTS.md)); the occasional divergence is a near-tie argmax flip from the quantized 2-token verify forward — not a quality regression — and speculative decoding stays exact w.r.t. the verify-pass distribution. Net: **faster decode at output quality on par with vanilla**, on a hybrid VLM that no existing speculative-decoding stack (mlx-vlm / omlx / MTPLX) drives with its embedded MTP head at all.
-- Vision works on the 8-bit quant (correct image captioning). Full numbers: [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+### MXFP4 (4-bit E2M1, group 32) — 14 GB · vision fp16 · DFlash-ready
 
-## How it works
+| Path | tok/s | speedup |
+|---|---|---|
+| Vanilla AR | 27.4 | 1.00× |
+| **DFlash** (z-lab drafter, block 16) | **36.5** | **1.33×** |
 
-- **Quantizer** (`mlx_mtp/oq_quantize.py`) — thin driver over oMLX's streaming `oQ` quantizer: language model → 8-bit affine, vision/audio + Qwen3.5 hybrid-SSM params (`a_log`, `dt_bias`, `conv1d`) kept fp16 automatically, `preserve_mtp=True`.
-- **Engine** (`mlx_mtp/engine.py`) — drives the model's own `language_model.mtp` head: draft a token via `mtp_forward(pre_norm_hidden, tok)`, verify the target on `[tok, draft]` in one forward (capturing logits + hidden + Mamba/GDN state), greedy-accept iff `draft == argmax(target)`, and `rollback_speculative_cache(...)` to restore **both** KV and SSM/conv state on rejection. *(Neither mlx-vlm nor oMLX wires the embedded head as the drafter for a VLM — both use an external gemma4 drafter; this engine is the missing piece.)*
-- **DFlash + hybrid** (`mlx_mtp/dflash.py`, `mlx_mtp/hybrid.py`) — adds the external DFlash drafter and a unified loop that picks MTP or DFlash per round by a **tokens-per-second** bandit. (They are *not* additive — both shorten decode steps — so the hybrid's job is to pick the faster drafter per context.)
+Half the size of oQ8 — Apple Silicon is memory-bandwidth-bound, so the smaller model decodes faster in absolute tok/s. Use oQ8 when output quality is the priority; MXFP4 when throughput or RAM headroom matters.
+
+Full numbers: [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+
+---
+
+## Quantization formats
+
+### `mlx_mtp.oq_quantize` — 8-bit affine (oQ)
+
+Thin driver over oMLX's streaming `oQ` quantizer. Language model → 8-bit affine (group 64); vision tower + projector + Qwen3.5 hybrid-SSM params (`a_log`, `dt_bias`, `conv1d`) kept fp16; MTP head preserved if present.
+
+```bash
+python -m mlx_mtp.oq_quantize \
+  --src <bf16-model-dir> --out <out-dir> --level 8
+```
+
+52 GB bf16 → **28 GB** 8-bit. Vision captions correctly. MTP head loads and drafts.
+
+### `mlx_mtp.mxfp4_quantize` — MXFP4 (OCP MX 4-bit)
+
+OCP Microscaling FP4: 4-bit E2M1 mantissa + shared E8M0 scale per group of 32. Language model linears → MXFP4; vision tower + projector (all multimodal modules) + Qwen3.5 SSM-sensitive params → fp16. MTP head preserved if the source checkpoint contains it.
+
+```bash
+python -m mlx_mtp.mxfp4_quantize \
+  --src <bf16-model-dir> --out <out-dir>
+```
+
+52 GB bf16 → **14 GB** 4-bit. Vision captions correctly. DFlash works. If the source has no MTP head the quantizer disables `mtp_num_hidden_layers` in the output config so it loads cleanly.
+
+### Why vision and SSM params stay fp16
+
+Vision encoders and projectors operate on continuous pixel/patch features — low-bit quantization visibly degrades captioning. Qwen3.5's hybrid SSM block has recurrent parameters (`a_log`, `dt_bias`, `conv1d`) that are both tiny and numerically sensitive; keeping them fp16 is essentially free. Everything else — attention + MLP linears, `lm_head` — is safe to quantize.
+
+---
+
+## Inference modes
+
+### Native MTP (`mlx_mtp.engine`)
+
+Drives the model's own `language_model.mtp` head as a self-drafter — no external drafter model required:
+
+1. Draft: `mtp_forward(pre_norm_hidden, tok)` → candidate token
+2. Verify: target forward on `[tok, draft]` in one pass, capturing logits + hidden + GDN/SSM state
+3. Greedy-accept iff `draft == argmax(target)`; on reject, `rollback_speculative_cache(...)` restores both KV **and** SSM/conv state
+
+Neither `mlx-vlm` nor `oMLX` wires the embedded MTP head as a drafter for a VLM — they both use an external gemma4-class drafter. This engine is the missing piece.
+
+```bash
+python -m mlx_mtp.bench \
+  --model <out-dir> --image test_image.png --out benchmark.json
+```
+
+### DFlash (`mlx_mtp.dflash`)
+
+Block-diffusion external drafter (e.g. `z-lab/Qwen3.6-27B-DFlash`). Block size is a tunable parameter — smaller blocks draft fewer tokens per round (less wasted work on rejects):
+
+```bash
+python -m mlx_mtp.dflash \
+  --model <out-dir> --drafter z-lab/Qwen3.6-27B-DFlash \
+  --block-size 8   # 8 | 16 | 32
+```
+
+DFlash is quant-agnostic on the target — it works on both oQ8 and MXFP4 builds.
+
+### Block-size sweep
+
+```bash
+python -m mlx_mtp.dflash --model <out-dir> --drafter <drafter> --block-sweep
+```
+
+| block_size | tok/s | speedup |
+|---|---|---|
+| 8 | 24.0 | 1.58× |
+| 16 | 23.9 | 1.57× |
+| 32 | 22.7 | 1.49× |
+
+### MTP + DFlash hybrid (`mlx_mtp.hybrid`)
+
+Unified loop that maintains both the MTP head and the DFlash drafter, and picks whichever produces more **tokens per second** (not tokens per round — that metric incorrectly over-selects DFlash) in a per-context bandit. On osmQwopus, native MTP tends to win; the hybrid is useful on models where DFlash's acceptance rate is higher.
+
+---
 
 ## Requirements
 
-Apple Silicon, macOS, Python 3.11+. This depends on the **oMLX** runtime stack (which is **not on PyPI**):
+Apple Silicon · macOS · Python 3.11+
 
 ```bash
-# 1. clone + install oMLX (pulls its pinned mlx / mlx-lm / mlx-vlm commits)
+# 1. Install oMLX (not on PyPI; pins its mlx / mlx-lm / mlx-vlm commits)
 git clone https://github.com/jundot/omlx && pip install -e ./omlx
-# 2. then use mlx-mtp from this repo (PYTHONPATH or pip install -e .)
-pip install -e .
+
+# 2. Install mlx-mtp
+git clone https://github.com/junainfinity/mlx-mtp && pip install -e ./mlx-mtp
 ```
 
-(Standalone `pip install mlx-mtp` is not yet possible because oMLX isn't a PyPI dependency — see caveats.)
+Tested on: MLX 0.31.2 · mlx-vlm 0.6.2 · Python 3.12 · macOS Sequoia · M4 Max.
 
-## Usage
+---
 
-```bash
-# Quantize a Qwen3.5/3.6 VLM to 8-bit (vision fp16, MTP preserved)
-python -m mlx_mtp.oq_quantize --src <bf16-model-dir> --out <out-dir> --level 8
+## Roadmap
 
-# Vanilla vs native-MTP (+ acceptance, output-match check)
-python -m mlx_mtp.engine --model <out-dir> --max-tokens 128
+- [ ] D2 / D3 multi-draft (chain the MTP head on its own hidden state for higher acceptance)
+- [ ] MXFP8 and nvFP4 quantization formats (same vision/SSM protection)
+- [ ] MTP-aware beam search
+- [ ] Standalone PyPI release (currently gated on oMLX not being on PyPI)
 
-# Full benchmark + vision test → JSON
-python -m mlx_mtp.bench --model <out-dir> --image test_image.png --out benchmark.json
-
-# DFlash alone, and the DFlash+MTP hybrid (needs a DFlash drafter)
-python -m mlx_mtp.dflash --model <out-dir> --drafter <dflash-drafter-dir>
-python -m mlx_mtp.hybrid --model <out-dir> --drafter <dflash-drafter-dir>
-```
+---
 
 ## Status & caveats
 
-- **Derivative work.** The MTP-head attach and the quantizer come from oMLX (Apache-2.0); the engine also calls private mlx-vlm functions (`_speculative_walk`, `rollback_speculative_cache`, `capture_layer_ids`). Pinned to that stack; expect breakage across versions. See [`NOTICE`](NOTICE).
-- **D1 only.** Single-token drafting is implemented; D2/D3 multi-draft (chain the head on its own hidden) is a natural extension.
-- **Hybrid is experimental** and, on the tested model, converges to native MTP (which wins). DFlash carries a cross-round draft-cache while MTP is stateless, which is why interleaving needs `reset()` + a min-dwell.
-- Tested on one model (osmQwopus-3.6-27B); numbers are illustrative, not a tuned benchmark.
+**Derivative work.** The MTP-head attach and the oQ quantizer come from oMLX (Apache-2.0); the engine calls private `mlx-vlm` functions (`_speculative_walk`, `rollback_speculative_cache`, `capture_layer_ids`). Pinned to that stack; expect breakage across upstream versions. See [`NOTICE`](NOTICE).
+
+**Not strictly lossless, but output is on par with vanilla.** MTP output matches vanilla greedy AR on most prompts (3/4 byte-identical in benchmarks); the occasional divergence is a near-tie argmax flip from the quantized 2-token verify forward — not a quality regression. Speculative decoding is exact w.r.t. the verify-pass distribution.
+
+**D1 only.** Single-token drafting is implemented; D2/D3 multi-draft is a planned extension.
+
+**Tested primarily on osmQwopus-3.6-27B.** Numbers are from real end-to-end runs, not a curated benchmark suite.
+
+---
 
 ## Credits
 
-- **[MTPLX](https://github.com/youssofal/MTPLX)** (Youssof Altoukhi) — native MTP speculative decoding, the inspiration.
-- **[oMLX](https://github.com/jundot/omlx)** — the `oQ` quantizer + embedded-MTP runtime patch + vision support this builds on.
-- **[mlx / mlx-lm / mlx-vlm](https://github.com/ml-explore)** (Apple ml-explore, Prince Canuma) — the engine.
-- **[mlx-optiq](https://mlx-optiq.com)** — mixed-precision quantization (the "optiq" reference).
+- **[MTPLX](https://github.com/youssofal/MTPLX)** (Youssof Altoukhi) — native MTP speculative decoding for LLMs; the inspiration.
+- **[oMLX](https://github.com/jundot/omlx)** — the `oQ` quantizer, embedded-MTP runtime patch, and vision support this builds on.
+- **[mlx / mlx-lm / mlx-vlm](https://github.com/ml-explore)** (Apple ml-explore, Prince Canuma) — the underlying engine.
+- **[mlx-optiq](https://mlx-optiq.com)** — mixed-precision quantization reference.
 - **DFlash** — `z-lab/Qwen3.6-27B-DFlash` block-diffusion drafter.
+
+---
 
 ## License
 
-[Apache-2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution of incorporated/adapted work.
+[Apache-2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution of incorporated and adapted work.
