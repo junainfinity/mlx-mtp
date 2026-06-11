@@ -78,7 +78,7 @@ python -m mlx_mtp.mxfp4_quantize \
 
 52 GB bf16 → **14 GB** 4-bit. Vision captions correctly. DFlash works. If the source has no MTP head the quantizer disables `mtp_num_hidden_layers` in the output config so it loads cleanly.
 
-Pre-quantized osmQwopus-3.6-27B MXFP4 build: **[junafinity/osmQwopus3.6-27B-mxfp4](https://huggingface.co/junafinity/osmQwopus3.6-27B-mxfp4)**
+Pre-quantized osmQwopus-3.6-27B MXFP4 build: **[osmapi/osmQwopus-3.6-27B-v2.1-uncensored-mxfp4](https://huggingface.co/osmapi/osmQwopus-3.6-27B-v2.1-uncensored-mxfp4)**
 
 ### Why vision and SSM params stay fp16
 
