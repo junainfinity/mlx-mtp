@@ -24,16 +24,23 @@ def load_dflash_drafter(path):
     return drafter, kind
 
 
-def dflash_generate(model, processor, config, drafter, text, max_tokens=128):
-    """DFlash speculative decode via mlx_vlm's generate path (draft_kind=dflash)."""
+def dflash_generate(model, processor, config, drafter, text, max_tokens=128,
+                    draft_block_size=None):
+    """DFlash speculative decode via mlx_vlm's generate path (draft_kind=dflash).
+
+    draft_block_size overrides the drafter's configured block size (default 16) at
+    runtime — fewer tokens drafted per round (8) = more rounds/lower speedup;
+    more (32) = bigger blocks. None → the drafter's trained block_size.
+    """
     prompt = apply_chat_template(processor, config, text, num_images=0)
+    extra = {} if draft_block_size is None else {"draft_block_size": int(draft_block_size)}
     t0 = time.perf_counter()
     ttft = None
     out = ""
     last = None
     for r in stream_generate(model, processor, prompt, image=None,
                              max_tokens=max_tokens, temperature=0.0,
-                             draft_model=drafter, draft_kind="dflash"):
+                             draft_model=drafter, draft_kind="dflash", **extra):
         if ttft is None:
             ttft = time.perf_counter() - t0
         out += r.text
@@ -52,6 +59,7 @@ def main():
     ap.add_argument("--drafter", required=True)
     ap.add_argument("--prompt", default="Write a short paragraph about the city of Tokyo.")
     ap.add_argument("--max-tokens", type=int, default=128)
+    ap.add_argument("--block-sweep", default="", help="comma list of draft_block_size to compare, e.g. 8,16,32")
     a = ap.parse_args()
 
     print(f">> loading target {a.model}", flush=True)
@@ -72,6 +80,16 @@ def main():
     rm = mtp_generate(model, processor, config, a.prompt, a.max_tokens)
     print(f"mtp: {rm['tokens']} tok @ {rm['tps']:.2f} tok/s | accept {rm['accept_rate']*100:.0f}%",
           flush=True)
+
+    if a.block_sweep:
+        print("\n--- DFlash block-size sweep (does block size change the outcome?) ---", flush=True)
+        sweep = {}
+        for b in [int(x) for x in a.block_sweep.split(",") if x.strip()]:
+            r = dflash_generate(model, processor, config, drafter, a.prompt, a.max_tokens, draft_block_size=b)
+            sweep[b] = r["tps"]
+            print(f"  block_size={b:>2}: {r['gen_tokens']} tok @ {r['tps']:.2f} tok/s ({r['tps']/rv['tps']:.2f}x)", flush=True)
+        print("====================================================", flush=True)
+        return
 
     print("\n--- DFlash ---", flush=True)
     rd = dflash_generate(model, processor, config, drafter, a.prompt, a.max_tokens)
