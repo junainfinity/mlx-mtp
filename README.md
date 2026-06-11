@@ -38,6 +38,20 @@ Half the size of oQ8 — Apple Silicon is memory-bandwidth-bound, so the smaller
 
 Full numbers: [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
 
+### MXFP4 quality (KL divergence vs BF16 reference)
+
+Measured via teacher-forced prefill over 10 diverse prompts (code, math, reasoning, instruction) — 244 token positions total, full vocabulary distributions compared at every position.
+
+| Metric | Value | Notes |
+|---|---|---|
+| **KL(bf16 ‖ mxfp4) mean** | **0.034 nats** | Forward divergence from reference |
+| JSD mean | 0.009 nats | Symmetric; JSD ≤ 0.01 = "essentially identical" |
+| **Top-1 agreement** | **92.4%** | Both models pick the same argmax token |
+| PPL increase | +0.87% | Perplexity under the reference token sequence |
+| Code prompts (KL) | 0.010–0.012 | Lowest divergence — code is most deterministic |
+
+JSD of 0.009 = 1.3% of the [0, ln(2)] bound. For a 4-bit model that is 3.7× smaller than bf16, this is excellent distribution fidelity. The 92.4% top-1 match matches what we observe in generation: most greedy outputs are byte-identical; divergences are near-tie argmax flips, not quality regressions.
+
 ---
 
 ## Quantization formats
