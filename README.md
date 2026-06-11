@@ -10,7 +10,7 @@
 - **MTP + DFlash hybrid** — adaptive per-round bandit that picks whichever drafter is faster in context
 - **A full benchmark harness** — vanilla vs MTP vs DFlash vs hybrid, with TTFT, acceptance rate, vision, and output-match checks
 
-> **Best recommended model: [osmQwopus-3.6-27B](https://huggingface.co/junainfinity/osmQwopus)** — a 27B Qwen3.6-based uncensored VLM. All benchmarks in this repo are on osmQwopus; it is the most tested and optimized target. The stack will work with any Qwen3.5/3.6-family VLM that carries a MTP head and runs in `mlx-vlm`.
+> **Best recommended model: osmQwopus-3.6-27B** — a 27B Qwen3.6-based uncensored VLM. Available as [oQ8 (28 GB)](https://huggingface.co/osmapi/osmQwopus-3.6-27B-V2-heretic-abliterated-uncensored-8-bit-mlx) and [MXFP4 (14 GB)](https://huggingface.co/junafinity/osmQwopus3.6-27B-mxfp4). All benchmarks in this repo are on osmQwopus; it is the most tested and optimized target. The stack will work with any Qwen3.5/3.6-family VLM that carries a MTP head and runs in `mlx-vlm`.
 
 > **mlx-mtp is the inference engine behind [VibeStudio](https://github.com/junainfinity/VibeStudio)**, a local coding-agent desktop app (Tauri + React). VibeStudio's Decoding tab — Standard / MTP ×N / DFlash / Speculative — selects and parameterizes this engine through `omlx serve`.
 
@@ -77,6 +77,8 @@ python -m mlx_mtp.mxfp4_quantize \
 ```
 
 52 GB bf16 → **14 GB** 4-bit. Vision captions correctly. DFlash works. If the source has no MTP head the quantizer disables `mtp_num_hidden_layers` in the output config so it loads cleanly.
+
+Pre-quantized osmQwopus-3.6-27B MXFP4 build: **[junafinity/osmQwopus3.6-27B-mxfp4](https://huggingface.co/junafinity/osmQwopus3.6-27B-mxfp4)**
 
 ### Why vision and SSM params stay fp16
 
