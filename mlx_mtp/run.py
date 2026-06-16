@@ -1,7 +1,7 @@
 """mlx-mtp runner — load a pure-mlx checkpoint and run text (+vision) generation.
 
 Vanilla AR and native-MTP speculative decoding via mlx_mtp.engine; optional vision
-smoke via the model's multimodal forward. No mlx_vlm / omlx.
+smoke via the model's multimodal forward. Pure Apple MLX.
 """
 from __future__ import annotations
 

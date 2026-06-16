@@ -28,6 +28,5 @@ env/
 .idea/
 .vscode/
 
-# local benchmark outputs (the committed one lives in benchmarks/)
+# local benchmark outputs
 /benchmark*.json
-!benchmarks/benchmark.json

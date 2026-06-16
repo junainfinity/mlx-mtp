@@ -1,7 +1,7 @@
 """mlx-mtp benchmark — TTFT, decode TPS (vanilla vs native-MTP), acceptance,
 and a vision test, all on the mlx-mtp 8-bit quant. Locally runnable, one model.
 
-    .venv-omlx/bin/python -m mlx_mtp.bench --model <dir> --image <png> --out <json>
+    python -m mlx_mtp.bench --model <dir> --image <png> --out <json>
 """
 from __future__ import annotations
 

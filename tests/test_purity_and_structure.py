@@ -4,7 +4,7 @@ Run: python3 -m pytest tests/test_purity_and_structure.py -v
 (or just `python3 tests/test_purity_and_structure.py` for a plain run)
 
 These verify the goal-1 contract WITHOUT the full 27B weights:
-  - purity: no mlx_vlm / mlx_lm / omlx imported at runtime
+  - purity: no third-party ML-inference frameworks imported at runtime
   - structure: 64 layers (full-attn every 4th), exactly 15 MTP tensors, 1199-tensor
     name parity vs the real checkpoint index
   - quantizer: skip predicates + mxfp4/mxfp8 round-trip error bands

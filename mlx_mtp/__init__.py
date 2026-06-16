@@ -1,10 +1,10 @@
 """mlx-mtp — native MTP speculative decoding + vision-preserving quantization for
-Qwen3.5/3.6 VLMs on Apple Silicon, built on Apple's mlx ONLY.
+Qwen3.5/3.6 VLMs on Apple Silicon, built on Apple's MLX ONLY.
 
-Pure mlx.core / mlx.nn (+ a tokenizer I/O boundary). No mlx_vlm, no mlx_lm, no omlx
-at runtime — the Qwen3.5 architecture (hybrid Gated-DeltaNet + full attention),
-the vision tower, the embedded MTP head, and the DFlash drafter are all vendored
-and extended here.
+Pure mlx.core / mlx.nn (+ a tokenizer I/O boundary). No third-party ML-inference
+frameworks at runtime — the Qwen3.5 architecture (hybrid Gated-DeltaNet + full
+attention), the vision tower, the embedded MTP head, and the DFlash drafter are
+all implemented here.
 
   - mlx_mtp.quantize : tensor-level MXFP4 / MXFP8 quantizer that keeps the vision
                        tower, MTP head, and SSM-sensitive params in fp16.

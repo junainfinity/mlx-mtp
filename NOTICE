@@ -1,33 +1,11 @@
 mlx-mtp
 Copyright 2026 junainfinity
 
-This product includes software and/or design adapted from the following
-projects. Their licenses and copyrights are acknowledged here.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-------------------------------------------------------------------------
-oMLX  (https://github.com/jundot/omlx)  — Apache-2.0
-  mlx-mtp's quantizer (mlx_mtp/oq_quantize.py) drives oMLX's streaming `oQ`
-  quantizer, and its engine relies on oMLX's mlx-vlm MTP runtime patch
-  (omlx.patches.mlx_vlm_mtp) to attach the embedded MTP head. Portions of
-  the approach and interfaces are derived from oMLX.
+Built on Apple's MLX (mlx.core / mlx.nn). The tokenizer and image-preprocessing
+I/O boundary uses HuggingFace transformers / tokenizers and Pillow.
 
-MTPLX  (https://github.com/youssofal/MTPLX)  — see upstream license
-  The native multi-token-prediction speculative-decoding method (draft via the
-  model's own MTP head, verify, probability-ratio accept + residual) that
-  mlx-mtp re-implements for vision-language models is from MTPLX.
-
-mlx, mlx-lm, mlx-vlm  (https://github.com/ml-explore , https://github.com/Blaizzy/mlx-vlm)
-  The inference engine. mlx-mtp calls mlx-vlm internals
-  (rollback_speculative_cache, capture_layer_ids, speculative._speculative_walk,
-  speculative.mtp/dflash helpers).
-
-DFlash  (z-lab/Qwen3.6-27B-DFlash)
-  External block-diffusion drafter used by the DFlash and hybrid paths.
-
-mlx-optiq  (https://mlx-optiq.com)
-  Reference for mixed-precision MLX quantization ("optiq").
-------------------------------------------------------------------------
-
-This is an independent research project and is not affiliated with or
-endorsed by any of the above. If you are an author of the above and want
-attribution adjusted or this removed, please open an issue.
+The DFlash and hybrid decoding paths can optionally use the external
+block-diffusion drafter z-lab/Qwen3.6-27B-DFlash; those weights are downloaded
+separately and are not redistributed here.

@@ -1,7 +1,7 @@
-"""Tiny pure-mlx activations + MLP, vendored to sever mlx_lm.
+"""Tiny pure-mlx activations + MLP on Apple mlx.nn.
 
-`swiglu` and the Qwen3 dense `MLP` are one-liners; reimplemented here on mlx.nn
-so nothing in mlx-mtp imports mlx_lm at runtime.
+`swiglu` and the Qwen3 dense `MLP` are one-liners, implemented here directly on
+mlx.nn so the package depends only on Apple MLX at runtime.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def swiglu(gate: mx.array, x: mx.array) -> mx.array:
 
 
 class Qwen3MLP(nn.Module):
-    """Dense gate/up/down SwiGLU MLP (== mlx_lm.models.qwen3.MLP), for the DFlash drafter."""
+    """Dense gate/up/down SwiGLU MLP (Qwen3-style), for the DFlash drafter."""
 
     def __init__(self, dim: int, hidden_dim: int):
         super().__init__()

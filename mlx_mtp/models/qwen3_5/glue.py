@@ -1,7 +1,7 @@
 """Top-level multimodal glue for Qwen3.5 (Qwen3_5ForConditionalGeneration), pure-mlx.
 
-Folds the qwen3_vl base Model into a single self-contained class: vision tower +
-language model + image-feature scatter. The key change vs mlx_vlm: `sanitize()`
+Folds the Qwen3-VL base Model into a single self-contained class: vision tower +
+language model + image-feature scatter. Notably, `sanitize()`
 PRESERVES the 15 MTP tensors (remapping `mtp.` -> `language_model.mtp.`) instead of
 dropping them, and applies the RMSNorm +1.0 convention to the MTP norms too, so the
 native embedded MTP head loads strictly.
@@ -38,7 +38,7 @@ def sanitize_key(key):
     elif key.startswith("model.visual"):
         key = key.replace("model.visual", "vision_tower", 1)
     elif key.startswith("mtp."):
-        # PRESERVE the MTP head (was dropped by mlx_vlm); bind to the native head.
+        # PRESERVE the MTP head; bind to the native embedded head.
         key = key.replace("mtp.", "language_model.mtp.", 1)
     elif key.startswith("lm_head"):
         key = key.replace("lm_head", "language_model.lm_head", 1)

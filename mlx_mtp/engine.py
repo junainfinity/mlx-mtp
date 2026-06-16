@@ -1,7 +1,7 @@
 """mlx-mtp engine — native embedded-MTP speculative decoding for Qwen3.5/3.6 VLMs.
 
-Pure mlx.core/mlx.nn (+ tokenizer boundary). The MTP head is now built into the model
-(mlx_mtp.models.qwen3_5), so there is NO omlx runtime patch and NO mlx_vlm import.
+Pure mlx.core/mlx.nn (+ tokenizer boundary). The MTP head is built into the model
+(mlx_mtp.models.qwen3_5) as a first-class module — no runtime monkey-patching.
 
   draft  : d = lm.mtp_forward(pre_norm_hidden_t, token_t)        # embedded MTP head predicts t+1
   verify : run target on [token_t, d] in one forward, capturing logits + pre-norm hidden + gdn states

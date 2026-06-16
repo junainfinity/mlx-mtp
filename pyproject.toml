@@ -24,7 +24,7 @@ classifiers = [
 ]
 # Pure Apple-MLX runtime: only mlx.core / mlx.nn for compute. transformers +
 # pillow are used ONLY at the tokenizer + image-preprocessing I/O boundary.
-# No mlx_vlm, no mlx_lm, no omlx — at install time or runtime.
+# No third-party ML-inference frameworks — at install time or runtime.
 dependencies = [
   "mlx>=0.31,<0.32 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
   "numpy>=2",

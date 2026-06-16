@@ -1916,7 +1916,7 @@ class LanguageModel(nn.Module):
         if not args.tie_word_embeddings:
             self.lm_head = nn.Linear(args.hidden_size, args.vocab_size, bias=False)
 
-        # Native embedded MTP head (replaces omlx's runtime monkey-patch). Bound post-load.
+        # Native embedded MTP head (first-class module, not a runtime patch). Bound post-load.
         if int(getattr(args, "mtp_num_hidden_layers", 0)) > 0:
             from mlx_mtp.models.qwen3_5.mtp_head import MTPHead
 

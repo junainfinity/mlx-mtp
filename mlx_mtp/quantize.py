@@ -1,4 +1,4 @@
-"""mlx-mtp pure-mlx quantizer — zero mlx_vlm/omlx dependency, safetensors I/O at tensor level.
+"""mlx-mtp pure-MLX quantizer — Apple mlx.core only, safetensors I/O at tensor level.
 
 COMPLETE pure-MLX quantization recipe for mlx-mtp (uses only mlx.core + stdlib):
   - Quantizes the language model to mxfp4 (4-bit) or mxfp8 (8-bit), OCP microscaling

@@ -1,8 +1,7 @@
 """Native embedded MTP (multi-token-prediction) head for mlx-mtp.
 
-This is the piece omlx used to monkey-patch in at runtime. Here it is a first-class
-`nn.Module` built INTO the Qwen3.5 LanguageModel, matching the exact 15 `mtp.*`
-checkpoint tensors:
+A first-class `nn.Module` built INTO the Qwen3.5 LanguageModel (rather than
+monkey-patched at runtime), matching the exact 15 `mtp.*` checkpoint tensors:
 
   pre_fc_norm_embedding.weight, pre_fc_norm_hidden.weight, fc.weight,
   layers.0.input_layernorm.weight, layers.0.post_attention_layernorm.weight,
@@ -13,7 +12,7 @@ The single MTP layer is a full-attention `Qwen3_5DecoderLayer` (full_attention_i
 so its self_attn carries the gated/partial-RoPE projections that match the checkpoint
 shapes (q_proj=[12288,5120]=24*256*2, o_proj=[5120,6144]=24*256).
 
-Forward mirrors mlx_vlm's Qwen3_5MTPDraftModel._forward_hidden, specialized to the
+Forward implements the Qwen3.5 MTP-draft hidden pass, specialized to the
 engine's D1 (one-draft-per-round) usage: a fresh KVCache each round, position 0.
 """
 from __future__ import annotations

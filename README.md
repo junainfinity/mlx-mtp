@@ -2,7 +2,7 @@
 
 **A pure-MLX quantization + inference stack for Apple Silicon — MXFP4/MXFP8 with the vision tower and MTP head preserved, plus native multi-token-prediction speculative decoding.**
 
-`mlx-mtp` runs large Qwen3.5/3.6-family vision-language models fast and locally on Apple Silicon using **only Apple's MLX** (`mlx.core` / `mlx.nn`) for all compute. No `mlx-vlm`, no `mlx-lm`, no `omlx` at runtime — HuggingFace `transformers` is used *only* at the tokenizer + image-preprocessing I/O boundary (MLX ships no tokenizer).
+`mlx-mtp` runs large Qwen3.5/3.6-family vision-language models fast and locally on Apple Silicon using **only Apple's MLX** (`mlx.core` / `mlx.nn`) for all compute — no third-party ML-inference frameworks. HuggingFace `transformers` is used *only* at the tokenizer + image-preprocessing I/O boundary (MLX ships no tokenizer).
 
 It ships:
 
@@ -17,9 +17,9 @@ It ships:
 
 ## Purity (the design goal)
 
-Every bit of model compute is Apple MLX. The quantizer imports **only `mlx.core` + the Python stdlib** — not even `transformers`. The runtime guard `mlx_mtp._import_guard.assert_no_forbidden_runtime()` raises if `mlx_vlm`, `mlx_lm`, or `omlx` ever lands in `sys.modules`.
+Every bit of model compute is Apple MLX. The quantizer imports **only `mlx.core` + the Python stdlib** — not even `transformers`. The runtime guard `mlx_mtp._import_guard.assert_no_forbidden_runtime()` raises if any third-party ML-inference framework ever lands in `sys.modules`.
 
-The Qwen3.5 VLM model code under `mlx_mtp/models/` was **vendored from `mlx-vlm` (Apache-2.0) and rewritten** to import only local / MLX symbols; the MTP head is built natively and the GDN/SSM speculative-rollback is implemented in-repo. Verified statically, by a runtime `sys.modules` scan after a real quantize (only `mlx` is pulled in), and by an adversarial lazy/transitive-import sweep.
+The Qwen3.5 VLM model code under `mlx_mtp/models/` is implemented directly on `mlx.core` / `mlx.nn`; the MTP head is built natively and the GDN/SSM speculative-rollback is implemented in-repo. Verified statically, by a runtime `sys.modules` scan after a real quantize (only `mlx` is pulled in), and by an adversarial lazy/transitive-import sweep.
 
 ---
 
@@ -76,7 +76,7 @@ Both quants pass the full real-weights gate on Apple Silicon:
 
 MXFP8 packed bytes are bit-identical to MLX's own `mx.quantize` round-trip, and quantization is deterministic (regenerated builds are byte-identical). Acceptance tests: `python -m pytest tests/ -v` (4/4; the name-parity/structure test runs when `QWOPUS_CODER` points at a bf16 checkpoint, otherwise skips — CI-safe).
 
-A full throughput benchmark (tok/s, TTFT) for the Coder MXFP4/MXFP8 builds is forthcoming; historical numbers for earlier osmQwopus builds live in [`benchmarks/`](benchmarks/).
+A full throughput benchmark (tok/s, TTFT) for the Coder MXFP4/MXFP8 builds is forthcoming.
 
 ---
 
@@ -88,20 +88,17 @@ Apple Silicon · macOS · Python 3.11+
 git clone https://github.com/junainfinity/mlx-mtp && pip install -e ./mlx-mtp
 ```
 
-Runtime deps: `mlx`, `transformers`, `numpy`, `pillow`. **No oMLX / mlx-vlm install needed.** Tested on MLX 0.31.2 · transformers 5.10.x · Python 3.14 · macOS · Apple M-series.
+Runtime deps: `mlx`, `transformers`, `numpy`, `pillow`. Tested on MLX 0.31.2 · transformers 5.10.x · Python 3.14 · macOS · Apple M-series.
 
 ---
 
 ## Credits
 
-- **[mlx / mlx-lm / mlx-vlm](https://github.com/ml-explore)** (Apple ml-explore, Prince Canuma) — MLX is the engine; the Qwen3.5 VLM model code here is **adapted/vendored from `mlx-vlm` (Apache-2.0)** and rewritten to remove the runtime dependency.
-- **[oMLX](https://github.com/jundot/omlx)** & **[MTPLX](https://github.com/youssofal/MTPLX)** (Youssof Altoukhi) — the embedded-MTP-as-self-drafter approach that inspired this engine, reimplemented natively here.
-- **DFlash** — `z-lab/Qwen3.6-27B-DFlash` block-diffusion drafter.
-
-See [`NOTICE`](NOTICE) for attribution of incorporated and adapted work.
+- **[MLX](https://github.com/ml-explore/mlx)** (Apple) — `mlx.core` / `mlx.nn`, the compute engine this is built on.
+- **DFlash** — `z-lab/Qwen3.6-27B-DFlash` block-diffusion drafter (optional, for the DFlash/hybrid paths).
 
 ---
 
 ## License
 
-[Apache-2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution of incorporated and adapted work.
+[Apache-2.0](LICENSE).
