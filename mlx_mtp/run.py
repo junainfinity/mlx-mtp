@@ -1,55 +1,39 @@
-"""mlx-mtp runner — load the quant (with MTP head attached) and run/benchmark.
+"""mlx-mtp runner — load a pure-mlx checkpoint and run text (+vision) generation.
 
-Vanilla AR generation (TTFT + decode TPS) and a vision test, on the mlx-mtp
-8-bit quant. (Native-MTP speculative decode lives in engine.py.)
+Vanilla AR and native-MTP speculative decoding via mlx_mtp.engine; optional vision
+smoke via the model's multimodal forward. No mlx_vlm / omlx.
 """
 from __future__ import annotations
 
 import argparse
 import time
 
-# Attach the MTP head to mlx_vlm's qwen3_5 LanguageModel so language_model.mtp.*
-# weights load cleanly (and are available to the MTP engine).
-from omlx.patches.mlx_vlm_mtp import (
-    apply_mlx_vlm_mtp_runtime_patch,
-    set_mtp_attach_enabled,
-)
+import mlx.core as mx
 
-set_mtp_attach_enabled(True)
-apply_mlx_vlm_mtp_runtime_patch()
-
-from mlx_vlm import load, stream_generate  # noqa: E402
-from mlx_vlm.prompt_utils import apply_chat_template  # noqa: E402
-from mlx_vlm.utils import load_config  # noqa: E402
+from mlx_mtp.engine import load_model, vanilla_generate, mtp_generate, _lm
+from mlx_mtp.tokenizer import apply_chat_template, eos_ids, preprocess_images
 
 
-def _gen(model, processor, config, prompt_text, image=None, max_tokens=128,
-         temp=0.0):
-    n_images = 1 if image else 0
-    prompt = apply_chat_template(processor, config, prompt_text, num_images=n_images)
-    images = [image] if image else None
-    t0 = time.perf_counter()
-    ttft = None
-    text = ""
-    last = None
-    ntok = 0
-    for r in stream_generate(model, processor, prompt, image=images,
-                             max_tokens=max_tokens, temperature=temp):
-        if ttft is None:
-            ttft = time.perf_counter() - t0
-        text += r.text
-        ntok += 1
-        last = r
-    wall = time.perf_counter() - t0
-    return {
-        "text": text,
-        "ttft_s": ttft,
-        "wall_s": wall,
-        "gen_tokens": getattr(last, "generation_tokens", ntok),
-        "gen_tps": getattr(last, "generation_tps", None),
-        "prompt_tokens": getattr(last, "prompt_tokens", None),
-        "prompt_tps": getattr(last, "prompt_tps", None),
-    }
+def _vision_generate(model, processor, config, prompt_text, image, max_tokens=128):
+    from PIL import Image
+
+    img = Image.open(image).convert("RGB")
+    prompt = apply_chat_template(processor, config, prompt_text, num_images=1)
+    pixel_values, grid_thw = preprocess_images(processor, [img], text=prompt)
+    input_ids = mx.array([processor.tokenizer.encode(prompt)])
+    lm = _lm(model)
+    eos = eos_ids(processor, config)
+    cache = lm.make_cache()
+    out = model(input_ids, pixel_values=pixel_values, image_grid_thw=grid_thw, cache=cache)
+    tok = int(mx.argmax(out.logits[:, -1, :], axis=-1).item())
+    toks = [tok]
+    for _ in range(max_tokens - 1):
+        if tok in eos:
+            break
+        out = lm(mx.array([[tok]]), cache=cache)
+        tok = int(mx.argmax(out.logits[:, -1, :], axis=-1).item())
+        toks.append(tok)
+    return processor.tokenizer.decode(toks)
 
 
 def main():
@@ -62,27 +46,27 @@ def main():
 
     print(f">> loading {a.model}", flush=True)
     t0 = time.perf_counter()
-    model, processor = load(a.model, trust_remote_code=True)
-    config = load_config(a.model, trust_remote_code=True)
+    model, processor, config = load_model(a.model)
     print(f">> loaded in {time.perf_counter()-t0:.1f}s", flush=True)
-    print(">> has MTP head attached:",
-          hasattr(getattr(model, "language_model", model), "mtp"), flush=True)
+    print(">> MTP head attached:", hasattr(_lm(model), "mtp"), flush=True)
 
     print("\n=== TEXT (vanilla AR) ===", flush=True)
-    rt = _gen(model, processor, config, a.prompt, image=None, max_tokens=a.max_tokens)
-    print(f"TTFT: {rt['ttft_s']*1000:.0f} ms | gen {rt['gen_tokens']} tok @ "
-          f"{rt['gen_tps']:.2f} tok/s | prompt {rt['prompt_tokens']} tok "
-          f"@ {rt['prompt_tps']:.1f} tok/s", flush=True)
+    rt = vanilla_generate(model, processor, config, a.prompt, a.max_tokens)
+    print(f"{rt['tokens']} tok @ {rt['tps']:.2f} tok/s | TTFT {rt['ttft_s']*1000:.0f}ms", flush=True)
     print("OUT:", rt["text"][:400], flush=True)
 
+    print("\n=== TEXT (native MTP) ===", flush=True)
+    rm = mtp_generate(model, processor, config, a.prompt, a.max_tokens)
+    print(f"{rm['tokens']} tok @ {rm['tps']:.2f} tok/s | accept {rm['accept_rate']*100:.0f}% "
+          f"({rm['accepts']}/{rm['rounds']})", flush=True)
+    if rt["tps"] > 0:
+        print(f">> MTP speedup: {rm['tps']/rt['tps']:.2f}x", flush=True)
+
     if a.image:
-        print("\n=== VISION (8-bit quant) ===", flush=True)
-        rv = _gen(model, processor, config,
-                  "Describe this image. What shapes and colors do you see?",
-                  image=a.image, max_tokens=a.max_tokens)
-        print(f"TTFT: {rv['ttft_s']*1000:.0f} ms | gen {rv['gen_tokens']} tok @ "
-              f"{rv['gen_tps']:.2f} tok/s", flush=True)
-        print("CAPTION:", rv["text"][:500], flush=True)
+        print("\n=== VISION ===", flush=True)
+        cap = _vision_generate(model, processor, config,
+                               "Describe this image in detail.", a.image, a.max_tokens)
+        print("CAPTION:", cap[:500], flush=True)
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlx-mtp"
-version = "0.1.0"
-description = "Native MTP speculative decoding + vision-preserving 8-bit quantization for Qwen3.5/3.6 VLMs on Apple Silicon (MLX)."
+version = "0.2.0"
+description = "Pure-MLX MXFP4/MXFP8 quantization + native MTP speculative decoding for Qwen3.5/3.6 VLMs on Apple Silicon, with the vision tower and MTP head preserved."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -22,12 +22,14 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# Runtime note: this also requires the oMLX stack (omlx + its pinned mlx/mlx-lm/
-# mlx-vlm commits), which is NOT on PyPI — install it from source separately:
-#   git clone https://github.com/jundot/omlx && pip install -e ./omlx
+# Pure Apple-MLX runtime: only mlx.core / mlx.nn for compute. transformers +
+# pillow are used ONLY at the tokenizer + image-preprocessing I/O boundary.
+# No mlx_vlm, no mlx_lm, no omlx — at install time or runtime.
 dependencies = [
   "mlx>=0.31,<0.32 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
   "numpy>=2",
+  "transformers>=4.49",
+  "pillow>=10",
 ]
 
 [project.urls]
@@ -35,7 +37,7 @@ Homepage = "https://github.com/junainfinity/mlx-mtp"   # <-- EDIT after you crea
 Issues = "https://github.com/junainfinity/mlx-mtp/issues"
 
 [project.scripts]
-mlx-mtp-quantize = "mlx_mtp.oq_quantize:main"
+mlx-mtp-quantize = "mlx_mtp.quantize:main"
 mlx-mtp-bench = "mlx_mtp.bench:main"
 
 [tool.hatch.build.targets.wheel]

@@ -13,10 +13,12 @@ venv/
 env/
 
 # models / weights (never commit — huge, and not ours to redistribute)
+# NOTE: anchored to repo root with a leading slash so it does NOT match the
+# source package mlx_mtp/models/ (the vendored Qwen3.5 model code).
 *.safetensors
 *.gguf
 *.bin
-models/
+/models/
 *-MLX-*/
 *-oQ8/
 *-DFlash/

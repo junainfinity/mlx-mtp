@@ -12,11 +12,8 @@ import time
 
 import mlx.core as mx
 
-from mlx_mtp.engine import (
-    load_model, vanilla_generate, mtp_generate, _lm, _prompt_ids,
-)
-from mlx_vlm import stream_generate
-from mlx_vlm.prompt_utils import apply_chat_template
+from mlx_mtp.engine import load_model, vanilla_generate, mtp_generate, _lm
+from mlx_mtp.tokenizer import apply_chat_template, eos_ids, preprocess_images
 
 PROMPTS = [
     "Write a short paragraph about the city of Tokyo.",
@@ -27,25 +24,33 @@ PROMPTS = [
 
 
 def vision_test(model, processor, config, image, max_tokens=96):
-    n_images = 1
+    from PIL import Image
+
+    img = Image.open(image).convert("RGB") if isinstance(image, str) else image
     prompt = apply_chat_template(
         processor, config,
-        "Describe this image. What shapes and colors do you see?",
-        num_images=n_images)
+        "Describe this image. What shapes and colors do you see?", num_images=1)
+    pixel_values, grid_thw = preprocess_images(processor, [img], text=prompt)
+    input_ids = mx.array([processor.tokenizer.encode(prompt)])
+    lm = _lm(model)
+    eos = eos_ids(processor, config)
+    cache = lm.make_cache()
     t0 = time.perf_counter()
-    ttft = None
-    text = ""
-    last = None
-    for r in stream_generate(model, processor, prompt, image=[image],
-                             max_tokens=max_tokens, temperature=0.0):
-        if ttft is None:
-            ttft = time.perf_counter() - t0
-        text += r.text
-        last = r
+    out = model(input_ids, pixel_values=pixel_values, image_grid_thw=grid_thw, cache=cache)
+    ttft = time.perf_counter() - t0
+    tok = int(mx.argmax(out.logits[:, -1, :], axis=-1).item())
+    toks = [tok]
+    t1 = time.perf_counter()
+    for _ in range(max_tokens - 1):
+        if tok in eos:
+            break
+        out = lm(mx.array([[tok]]), cache=cache)
+        tok = int(mx.argmax(out.logits[:, -1, :], axis=-1).item())
+        toks.append(tok)
+    dt = time.perf_counter() - t1
     return {
-        "ttft_s": ttft, "text": text,
-        "gen_tokens": getattr(last, "generation_tokens", None),
-        "gen_tps": getattr(last, "generation_tps", None),
+        "ttft_s": ttft, "text": processor.tokenizer.decode(toks),
+        "gen_tokens": len(toks), "gen_tps": (len(toks) - 1) / dt if dt > 0 else 0.0,
     }
 
 

@@ -24,15 +24,64 @@ import time
 
 import mlx.core as mx
 
-from mlx_mtp.engine import (
-    load_model, vanilla_generate, mtp_generate, _lm, _eos_ids, _prompt_ids,
-)
-from mlx_mtp.dflash import load_dflash_drafter, dflash_generate
-from mlx_vlm.speculative.common import _speculative_walk
+from mlx_mtp.engine import load_model, vanilla_generate, mtp_generate, _lm
+from mlx_mtp.tokenizer import eos_ids as _eos_ids
+from mlx_mtp.tokenizer import prompt_ids as _prompt_ids
+from mlx_mtp.dflash import load_dflash_drafter
+from mlx_mtp.speculative import _speculative_walk
 
 
 def _argmax_sampler(logits):
     return mx.argmax(logits, axis=-1)
+
+
+def dflash_generate(model, processor, config, drafter, text, max_tokens=128,
+                    block_size=16):
+    """Standalone DFlash block-diffusion speculative decode (greedy).
+
+    Shares the MTP verify/rollback loop: draft a (block_size-1)-token block from the
+    target hidden at the drafter's target_layer_ids, verify [bonus, block] in one
+    target forward, greedily accept via _speculative_walk, then roll back KV+GDN state.
+    """
+    lm = _lm(model)
+    eos = _eos_ids(processor, config)
+    cap = sorted(set(drafter.config.target_layer_ids))
+    ids, _ = _prompt_ids(processor, config, text)
+    cache = lm.make_cache()
+
+    t0 = time.perf_counter()
+    out = lm(ids, cache=cache, capture_layer_ids=cap)
+    h_df = mx.concatenate([h[:, -1:, :] for h in out.hidden_states], axis=-1)
+    cur = int(mx.argmax(out.logits[:, -1, :], axis=-1).item())
+    mx.eval(cur)
+    ttft = time.perf_counter() - t0
+
+    toks = [cur]
+    draft_cache = drafter.reset(model)
+    t1 = time.perf_counter()
+    while len(toks) < max_tokens:
+        if cur in eos:
+            break
+        budget = max_tokens - len(toks)
+        draft_tokens = drafter.draft_block(cur, h_df, draft_cache, block_size,
+                                           _argmax_sampler, mx.int32)
+        verify_in = mx.concatenate(
+            [mx.array([[cur]], dtype=mx.int32), draft_tokens.astype(mx.int32)], axis=1)
+        vout = lm(verify_in, cache=cache, capture_layer_ids=cap)
+        target_tokens = mx.argmax(vout.logits, axis=-1)
+        accepted, new = _speculative_walk(draft_tokens, target_tokens, budget)
+        for tk in new:
+            toks.append(int(tk))
+        cur = int(toks[-1])
+        h_full = mx.concatenate(vout.hidden_states, axis=-1)
+        h_df = h_full[:, accepted:accepted + 1, :]
+        lm.rollback_speculative_cache(cache, vout.gdn_states, accepted, block_size)
+        mx.eval(cur)
+    decode_t = time.perf_counter() - t1
+    text_out = processor.tokenizer.decode(toks) if hasattr(processor, "tokenizer") else processor.decode(toks)
+    n = len(toks)
+    return {"mode": "dflash", "text": text_out, "tokens": n, "ttft_s": ttft,
+            "decode_s": decode_t, "tps": (n - 1) / decode_t if decode_t > 0 else 0.0}
 
 
 def hybrid_generate(model, processor, config, drafter, text,
