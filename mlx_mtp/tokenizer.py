@@ -13,10 +13,63 @@ import mlx.core as mx
 
 
 def load_processor(path: str):
-    """AutoProcessor (fast tokenizer + Qwen3-VL image processor)."""
+    """AutoProcessor (fast tokenizer + Qwen3-VL image processor).
+
+    Falls back to an image+text-only processor when the environment has no torch:
+    transformers eagerly instantiates a torch-backed *video* processor we never use,
+    so on a torch-free (pure-mlx) install we build the processor from the tokenizer +
+    image processor directly and skip video."""
     from transformers import AutoProcessor
 
-    return AutoProcessor.from_pretrained(path)
+    try:
+        return AutoProcessor.from_pretrained(path)
+    except Exception as e:
+        msg = str(e).lower()
+        if "torch" not in msg and "video" not in msg:
+            raise
+
+    import transformers
+    from transformers import AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(path)
+    # The Auto* image-processor resolver pulls in torch; the concrete PIL class does
+    # not. Use the PIL backend directly (numpy/PIL only) — no torch / torchvision.
+    ImgCls = (getattr(transformers, "Qwen2VLImageProcessorPil", None)
+              or getattr(transformers, "Qwen2VLImageProcessor", None))
+    if ImgCls is None:
+        raise RuntimeError("no torch-free image processor available in transformers")
+    img = ImgCls.from_pretrained(path)
+    return _ImageTextProcessor(tok, img)
+
+
+class _ImageTextProcessor:
+    """Torch-free Qwen3-VL processor: AutoTokenizer (text) + PIL image processor
+    (vision), no video processor. The full transformers Qwen3VLProcessor mandates a
+    torch-backed video processor we never use; this shim exposes exactly the surface
+    mlx-mtp needs — `.tokenizer` and `__call__(text=, images=)` with the same image
+    placeholder expansion (one image token -> prod(grid_thw)//merge^2 tokens)."""
+
+    def __init__(self, tokenizer, image_processor):
+        self.tokenizer = tokenizer
+        self.image_processor = image_processor
+        self.merge_size = int(getattr(image_processor, "merge_size", 2) or 2)
+        self.image_token = "<|image_pad|>"
+
+    def __call__(self, text=None, images=None, return_tensors=None, **kw):
+        if not images:
+            return self.tokenizer(text, return_tensors=return_tensors)
+        feat = self.image_processor(images=images, return_tensors=return_tensors)
+        grids = feat["image_grid_thw"]
+        m2 = self.merge_size * self.merge_size
+        out = text
+        for g in grids:
+            t, h, w = int(g[0]), int(g[1]), int(g[2])
+            out = out.replace(self.image_token, self.image_token * ((t * h * w) // m2), 1)
+        enc = self.tokenizer(out, return_tensors=return_tensors)
+        feat["input_ids"] = enc["input_ids"]
+        if "attention_mask" in enc:
+            feat["attention_mask"] = enc["attention_mask"]
+        return feat
 
 
 def load_tokenizer(path: str):

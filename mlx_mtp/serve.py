@@ -33,6 +33,7 @@ import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import mlx.core as mx
 
@@ -161,16 +162,42 @@ def parse_tool_call(inner: str):
 # engine — load once, stream tokens (vanilla sampling | native MTP greedy)
 # ===========================================================================
 
+def resolve_model_dir(path: str) -> str:
+    """Accept either a single model dir (has config.json) or a tree of models; for a
+    tree, pick one model preferring mxfp8 > mxfp4 > any quantized > first."""
+    p = Path(path).expanduser()
+    if (p / "config.json").exists():
+        return str(p)
+    cands = [d for d in sorted(p.iterdir())
+             if d.is_dir() and (d / "config.json").exists() and list(d.glob("*.safetensors"))]
+    if not cands:
+        raise FileNotFoundError(f"no model (config.json + safetensors) found in {path}")
+
+    def rank(d):
+        n = d.name.lower()
+        if "mxfp8" in n:
+            return 0
+        if "mxfp4" in n:
+            return 1
+        try:
+            q = json.loads((d / "config.json").read_text()).get("quantization")
+        except Exception:
+            q = None
+        return 2 if q else 3
+
+    return str(sorted(cands, key=rank)[0])
+
+
 class Engine:
     def __init__(self, model_dir: str):
-        self.model_dir = model_dir
-        self.model, self.processor, self.config = _load(model_dir)
+        self.model_dir = resolve_model_dir(model_dir)
+        self.model, self.processor, self.config = _load(self.model_dir)
         self.lm = self.model.language_model
         self.tok = self.processor.tokenizer
         self.eos = _eos_set(self.processor, self.config)
         self.has_mtp = hasattr(self.lm, "mtp") and self.lm.mtp is not None
         self.lock = threading.Lock()           # one GPU → serialize generation
-        self.model_id = os.path.basename(os.path.normpath(model_dir))
+        self.model_id = os.path.basename(os.path.normpath(self.model_dir))
 
     # ---- prompt build ----
     def build_prompt(self, messages, tools):
