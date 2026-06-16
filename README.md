@@ -62,6 +62,27 @@ python -m mlx_mtp.bench --model <out-dir> --image test.png --out benchmark.json
 
 ---
 
+## Serve (OpenAI-compatible)
+
+Run a model behind a streaming OpenAI Chat Completions API — **pure stdlib HTTP + MLX**, no web framework:
+
+```bash
+mlx-mtp-serve --model-dir <out-dir> --port 8400 --host 127.0.0.1 [--api-key KEY]
+# equivalently: python -m mlx_mtp.serve serve --model-dir <out-dir> --port 8400
+```
+
+- `GET /v1/models` — health/readiness probe
+- `POST /v1/chat/completions` — streaming (SSE) or blocking; OpenAI-compatible
+- Decoding per request via `"decoder": "mtp" | "vanilla"` (default `mtp`); the vanilla path honors `temperature` / `top_p` / `top_k`
+- Multi-turn + system + **tool calling** (OpenAI `tools` → the model's tool syntax → `delta.tool_calls`)
+- **Vision** via OpenAI `image_url` data-URI content blocks
+- `<think>…</think>` reasoning is streamed as `delta.reasoning_content`
+- Bearer auth when `--api-key` is set
+
+Any OpenAI client (incl. agent frameworks) can drive it at `http://127.0.0.1:8400/v1`.
+
+---
+
 ## Validation (osmQwopus-3.6-27B-Coder, this release)
 
 Both quants pass the full real-weights gate on Apple Silicon:

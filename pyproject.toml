@@ -39,6 +39,7 @@ Issues = "https://github.com/junainfinity/mlx-mtp/issues"
 [project.scripts]
 mlx-mtp-quantize = "mlx_mtp.quantize:main"
 mlx-mtp-bench = "mlx_mtp.bench:main"
+mlx-mtp-serve = "mlx_mtp.serve:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mlx_mtp"]

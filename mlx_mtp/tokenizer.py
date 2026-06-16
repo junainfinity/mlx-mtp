@@ -66,6 +66,17 @@ def apply_chat_template(processor, config, text: str, num_images: int = 0) -> st
     return tok.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
 
+def apply_chat_template_messages(processor, messages, tools=None, add_generation_prompt: bool = True) -> str:
+    """Render a full OpenAI-style messages[] list (system/user/assistant/tool + tools)
+    through the model's chat_template.jinja. Unlike apply_chat_template (single user
+    turn), this forwards the entire conversation so multi-turn + tool-calling work."""
+    tok = _tok(processor)
+    kwargs = {"add_generation_prompt": add_generation_prompt, "tokenize": False}
+    if tools:
+        kwargs["tools"] = tools
+    return tok.apply_chat_template(messages, **kwargs)
+
+
 def prompt_ids(processor, config, text: str, num_images: int = 0):
     prompt = apply_chat_template(processor, config, text, num_images=num_images)
     return mx.array([_tok(processor).encode(prompt)]), prompt
