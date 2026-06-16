@@ -109,7 +109,7 @@ Apple Silicon · macOS · Python 3.11+
 git clone https://github.com/junainfinity/mlx-mtp && pip install -e ./mlx-mtp
 ```
 
-Runtime deps: `mlx`, `transformers`, `numpy`, `pillow`. Tested on MLX 0.31.2 · transformers 5.10.x · Python 3.14 · macOS · Apple M-series.
+Runtime deps: `mlx`, `transformers`, `numpy`, `pillow`, `jinja2` — **no PyTorch required** (the tokenizer + a PIL-only image processor cover the I/O boundary). Tested on MLX 0.31.2 · transformers 5.10–5.12 · Python 3.14 · macOS · Apple M-series.
 
 ---
 
